@@ -7,10 +7,18 @@ import { Reveal } from '../components/Reveal'
 import { SectionHeading } from '../components/SectionHeading'
 import { assessment } from '../content'
 import { cx } from '../lib/cx'
+import { READINESS_EVENT } from '../lib/intake'
 
 type Answers = Record<string, number | null>
 
 const emptyAnswers = () => Object.fromEntries(assessment.questions.map((q) => [q.id, null])) as Answers
+
+// The result cannot send itself — it has no contact details — so it is handed
+// to the lead form below, which submits it with the enquiry.
+function announce(band: string, percent: number, gaps: string[]) {
+  const summary = `${percent}/100 · ${band} · gaps: ${gaps.length ? gaps.join(', ') : 'none'}`
+  window.dispatchEvent(new CustomEvent(READINESS_EVENT, { detail: { summary } }))
+}
 
 export function Assessment() {
   const [answers, setAnswers] = useState<Answers>(emptyAnswers)
@@ -117,7 +125,7 @@ export function Assessment() {
                     ))}
                   </ol>
 
-                  <Button href="#cta" className="mt-6 w-full">
+                  <Button href="#cta" className="mt-6 w-full" onClick={() => announce(band.label, percent, gaps)}>
                     Book the review
                     <ArrowRight />
                   </Button>

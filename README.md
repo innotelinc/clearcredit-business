@@ -24,16 +24,34 @@ npm run typecheck
   state: no credit pull, no submission, nothing stored.
 - `src/sections/Ladder.tsx` — the four-stage build (foundation → tier 1 → tier 2
   → tier 3).
-- `src/worker/index.ts` — Cloudflare Worker. `POST /api/intake` validates the
-  request and forwards it to the ClearPath Business workspace.
+- `src/lib/intake.ts` — the lead submission: posts to the Denovo platform's
+  intake endpoint. `src/worker/index.ts` is the same-origin fallback.
 
 ## Denovo integration
 
-`/api/intake` hands a lead to the workspace at
+The lead form posts straight at the platform: `POST {VITE_DENOVO_API_URL}/api/intake`.
+The platform validates, routes the lead to a product and stores it in the workspace
+inbox, so a submission is in the staff queue before anyone leaves the page.
+
+`VITE_DENOVO_API_URL` is baked in at build time. In development it defaults to
+`http://127.0.0.1:3200`, the platform's local port. With no variable set the form
+posts to this origin, where the Worker validates it and forwards it instead.
+
+The readiness check never sends anything on its own — it has no contact details — so
+it hands its score, band and gaps to the form (`READINESS_EVENT`), which submits them
+as the lead's `message`. A lead arrives with the result the visitor just saw.
+
+The platform only answers a CORS preflight for the origins in its `SITE_ORIGINS`
+variable (development defaults to `http://localhost:5183` and `http://127.0.0.1:5183`).
+For a deploy, set `VITE_DENOVO_API_URL` to the platform's public URL and add the
+site's origin to `SITE_ORIGINS` on the platform, then redeploy both.
+
+### Same-origin fallback (Worker)
+
+With no `VITE_DENOVO_API_URL`, `/api/intake` on this origin forwards a lead to
 `{CLEARPATH_INTAKE_URL}/api/denovo/leads`, signing the exact JSON body with
-HMAC-SHA256 (`x-clearpath-signature`, secret in `CLEARPATH_SHARED_SECRET`). That
-is the same contract the workspace documents, so the site and Denovo's own
-systems deliver leads the same way.
+HMAC-SHA256 (`x-clearpath-signature`, secret in `CLEARPATH_SHARED_SECRET`). That is
+the platform's documented signed handoff.
 
 Worker variables:
 

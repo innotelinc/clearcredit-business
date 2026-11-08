@@ -1,11 +1,12 @@
 import { ArrowRight, Check } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 
 import { Aurora } from '../components/Aurora'
 import { Button } from '../components/Button'
 import { Container } from '../components/Container'
 import { Reveal } from '../components/Reveal'
 import { cta } from '../content'
+import { READINESS_EVENT, submitIntake, type ReadinessDetail } from '../lib/intake'
 
 const inputClass =
   'depth relative h-12 w-full min-w-0 rounded-control bg-bg/60 px-4 text-[15px] text-fg placeholder:text-faint backdrop-blur focus:outline-none focus:[--depth-edge:rgb(47_214_163/0.7)]'
@@ -14,6 +15,20 @@ export function Cta() {
   const [form, setForm] = useState({ name: '', email: '', phone: '', business: '', interest: cta.interests[0] })
   const [state, setState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')
   const [message, setMessage] = useState('')
+  const [readiness, setReadiness] = useState('')
+
+  // The readiness check cannot submit on its own — it has no contact details —
+  // so it hands its result to this form, which carries it into the lead.
+  useEffect(() => {
+    const onReadiness = (event: Event) => {
+      const detail = (event as CustomEvent<ReadinessDetail>).detail
+      if (!detail?.summary) return
+      setReadiness(detail.summary)
+      setForm((prev) => ({ ...prev, interest: cta.interests[0] }))
+    }
+    window.addEventListener(READINESS_EVENT, onReadiness)
+    return () => window.removeEventListener(READINESS_EVENT, onReadiness)
+  }, [])
 
   function update(key: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -22,20 +37,25 @@ export function Cta() {
   async function submit(event: FormEvent) {
     event.preventDefault()
     setState('sending')
-    try {
-      const response = await fetch('/api/intake', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, source: 'clearpath-site' }),
-      })
-      const body = (await response.json()) as { error?: string }
-      if (!response.ok) throw new Error(body.error ?? 'Something went wrong.')
-      setState('done')
-      setMessage(cta.success)
-    } catch (error) {
+    setMessage('')
+
+    const result = await submitIntake({
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      business_name: form.business,
+      interest: form.interest,
+      message: readiness,
+      source: 'clearpath-site',
+    })
+
+    if (!result.ok) {
       setState('error')
-      setMessage(error instanceof Error ? error.message : 'Something went wrong.')
+      setMessage(result.error)
+      return
     }
+    setState('done')
+    setMessage(cta.success)
   }
 
   return (
@@ -134,11 +154,20 @@ export function Cta() {
                       </option>
                     ))}
                   </select>
+                  {readiness && (
+                    <p className="rounded-control bg-accent/10 px-3 py-2 text-[12px] leading-relaxed text-accent">
+                      Your readiness result is attached: {readiness}
+                    </p>
+                  )}
                   <Button size="lg" type="submit" disabled={state === 'sending'} className="mt-1 w-full">
                     {state === 'sending' ? 'Sending…' : cta.button}
                     <ArrowRight />
                   </Button>
-                  {state === 'error' && <p className="text-[13px] text-accent-3">{message}</p>}
+                  {state === 'error' && (
+                    <p role="alert" className="text-[13px] text-accent-3">
+                      {message}
+                    </p>
+                  )}
                 </form>
               )}
             </div>
