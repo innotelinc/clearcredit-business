@@ -85,11 +85,17 @@ app.post('/api/intake', async (c) => {
   if (!interests.has(interest)) return c.json({ error: 'Choose one of the listed programs.' }, 400)
 
   const result = await handoff(c.env, { name, email, phone, business, interest, source: 'clearpath-site' })
-  // The visitor gets an honest answer either way; the delivery state is logged
-  // for the team rather than shown as a failure to a prospect.
-  if (!result.delivered) console.warn('clearpath intake handoff:', result)
+  if (!result.delivered) {
+    // Nothing stored the lead, so the visitor must not be told it was received.
+    // The form shows this message and offers the phone number instead.
+    console.warn('clearpath intake handoff:', result)
+    return c.json(
+      { error: "We couldn't save your details just now. Call (774) 505-7135 and we'll take them by phone." },
+      503,
+    )
+  }
 
-  return c.json({ ok: true, delivered: result.delivered })
+  return c.json({ ok: true, delivered: true })
 })
 
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw))
